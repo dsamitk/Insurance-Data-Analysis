@@ -1,0 +1,539 @@
+library(dplyr)
+
+#Sser working directory
+setwd("D://")
+
+#Read CSV Data
+navirishDf <- read.csv("Navirisk_data_June42018.csv",header = TRUE,stringsAsFactors = FALSE)
+
+#Clean last 3 rows data, as they were blank
+navirishDf <- navirishDf[-c(4777,4778),]
+
+summary(navirishDf)
+
+#Find out missing value in dataset
+colSums(is.na(navirishDf))
+
+
+#Extracting Variable names
+dqr<-as.data.frame(names(navirishDf))
+
+
+#Recording Data Type for each Variable
+dqr$DataType<-sapply(navirishDf,class)
+
+#No. of Records for each Variable
+dqr$No.ofRecords<-nrow(navirishDf)
+
+#Counting No. of Unique Values for each variable
+for(i in 1:ncol(navirishDf))
+{
+  dqr$UniqueRecords[i]<-length(unique(navirishDf[,i]))
+}
+
+
+#No.of observations available for each variable and its percentage
+dqr$DataAvailable<-colSums(!is.na(navirishDf))
+dqr$AvailablePercentage<-round(colMeans(!is.na(navirishDf)),4)
+
+
+#Total and Percentage of Missing Values for each Variable
+dqr$Missing<-colSums(is.na(navirishDf))
+dqr$MissingPercentage<-round(colMeans(is.na(navirishDf)),4)
+
+#c<- quantile(navirishDf[,i],c(.05,.1,.25,.50,.75,.90,.95))
+
+options(scipen = 999)
+
+# create a null variable
+
+cf <- NULL
+
+# running a loop to find out the percentile values of all coulmns
+
+for (i in 1:ncol(navirishDf)) 
+{
+  
+  if(class(DF[,i])=="character") {
+    c<- c(0==.00001,.05==0,.1==0,.25==0,.5==0,.75==0,.90==0,.95==0,1==0,1==0)
+  }
+  else
+  {
+    c<- quantile(navirishDf[,i],c(0,.05,.1,.25,.50,.75,.90,.95,1)) 
+    c[10]<- c(mean(navirishDf[,i]))
+  }
+  
+  c<- round(c,2)
+  cf <- rbind(cf,c)
+}
+
+
+class(cf)
+
+cf<- as.data.frame(cf)
+
+dqr$Minimum <- cf$`0%`
+dqr$Maximum <- cf$`100%`
+dqr$'5th percentile'<- cf$`5%`
+dqr$'10th percentile' <- cf$`10%`
+dqr$'25th percentile'<- cf$ `25%`
+dqr$'50th percentile'<- cf$`50%`
+dqr$'75th percentile'<- cf$`75%`
+dqr$'90th percentile'<- cf$`90%`
+dqr$'95th percentile'<- cf$`95%`
+dqr$Mean<- cf$V10
+
+
+# Export data summary report of internal data 
+write.csv(dqr,"D:\\summary_report_Internal data.csv")
+
+############################################################
+
+# import external file into R
+library(readxl)
+library(xlsx)
+library(lubridate)
+
+summary(navirishDf)
+
+#navirishDf$TRD_Terminate_date[navirishDf$TRD_Terminate_date==""] <- navirishDf$TRD_val_date[navirishDf$TRD_Terminate_date==""]
+
+# create new column to capture the termination date of customers as we will use the original coulmn for merging and post merging will remove that
+
+navirishDf$TERDATE <- navirishDf$TRD_Terminate_date
+
+
+navirishDf$TRD_Terminate_date[navirishDf$TRD_Terminate_date==""] <- "12/27/2012"
+
+
+
+## ADD KEY FIELDS IN MAIN TABLE
+navirishDf$TRD_Terminate_date <- mdy(navirishDf$TRD_Terminate_date)
+navirishDf$Year <- year(navirishDf$TRD_Terminate_date)
+navirishDf$Month <- paste0(month(navirishDf$TRD_Terminate_date),"-",year(navirishDf$TRD_Terminate_date))
+navirishDf$Week <- paste0(week(navirishDf$TRD_Terminate_date),"-",year(navirishDf$TRD_Terminate_date))
+navirishDf$QtrState <- paste0(quarter(navirishDf$TRD_Terminate_date),"-",year(navirishDf$TRD_Terminate_date),"-",navirishDf$PH_st_cd )
+
+## Another another varibale to capture the macro variables values as per policy issue date
+
+navirishDf$PD_issue_date <- mdy(navirishDf$PD_issue_date)
+navirishDf$Year1 <- year(navirishDf$PD_issue_date)
+navirishDf$Month1 <- paste0(month(navirishDf$PD_issue_date),"-",year(navirishDf$PD_issue_date))
+navirishDf$Week1 <- paste0(week(navirishDf$PD_issue_date),"-",year(navirishDf$PD_issue_date))
+navirishDf$QtrState1 <- paste0(quarter(navirishDf$PD_issue_date),"-",year(navirishDf$PD_issue_date),"-",navirishDf$PH_st_cd )
+
+
+
+
+
+##1. Read 1st sheet of data, GDP
+nRiskGDPDf <- as.data.frame(read_excel("External_data_NRisk.xlsx", sheet = 1 ))
+names(nRiskGDPDf) <- make.names(names(nRiskGDPDf))
+
+# Make sure if every year is unique, summarizing it by year
+nRiskGDPDf <- nRiskGDPDf %>% group_by(Year) %>% summarise(GrossDomesticProduct=sum(Gross.domestic.product)/n())
+
+####
+
+
+
+#Join main CSV Data with GDP
+#Add Month/Week
+#Join main CSV Data with GDP
+navirishDf <-  navirishDf  %>% left_join(nRiskGDPDf, by= c("Year"="Year"))
+
+#
+nRiskGDPDf$Year1<- nRiskGDPDf$Year
+navirishDf <-  navirishDf  %>% left_join(nRiskGDPDf[,-1], by= c("Year1"="Year1"))
+
+##2. Read another sheet Corp_Bond_rates
+nRiskCDRDf <- as.data.frame(read_excel("External_data_NRisk.xlsx", sheet = 2 ))
+names(nRiskCDRDf) <- make.names(names(nRiskCDRDf))
+
+#Create Date Field
+nRiskCDRDf$Date <-  ymd(nRiskCDRDf$Date)
+nRiskCDRDf$Month <-  paste0(month(nRiskCDRDf$Date),"-",year(nRiskCDRDf$Date))
+
+# Make sure if every month is unique, summarizing it by month
+nRiskCDRDf <- nRiskCDRDf %>% group_by(Month) %>% summarise(CorpBondRate=sum(corp_bond_rate)/n()) %>% select(Month,CorpBondRate )
+
+#Join main CSV Data with GDP
+navirishDf <-  navirishDf  %>% left_join(nRiskCDRDf, by= c("Month"="Month"))
+
+####
+nRiskCDRDf$Month1 <- nRiskCDRDf$Month
+navirishDf <-  navirishDf  %>% left_join(nRiskCDRDf[,-1], by= c("Month1"="Month1"))
+
+
+##3. Read another sheet market_returns
+nRiskMRDf <- as.data.frame(read_excel("External_data_NRisk.xlsx", sheet = 3 ))
+
+#1st rows is the column names
+names(nRiskMRDf) <- make.names(nRiskMRDf[1,])
+#Drop 1st row as it does not have values
+nRiskMRDf <- nRiskMRDf[-1,]
+
+nRiskMRDf$Week.Beginning <- as.Date(as.numeric(nRiskMRDf$Week.Beginning) , origin="1899-12-30")
+#Convert values to date & Create Date Field
+nRiskMRDf$Week <- paste0(week(nRiskMRDf$Week.Beginning),"-",year(nRiskMRDf$Week.Beginning))
+
+week(mdy("12/28/2008"))
+week(mdy("12/28/2009"))
+
+
+
+View(nRiskMRDf$Week)
+
+#nRiskMRDf[year(ymd(nRiskMRDf$Week.Beginning))==2006,]
+# Fields Conversion to Numeric, as some data is char
+nRiskMRDf$X5.Year.FD <- as.numeric(nRiskMRDf$X5.Year.FD)
+nRiskMRDf$BONDS.Treasury.5.Year <- as.numeric(nRiskMRDf$BONDS.Treasury.5.Year)
+nRiskMRDf$BONDS.Treasury.10.Year <- as.numeric(nRiskMRDf$BONDS.Treasury.10.Year)
+nRiskMRDf$STOCKS.S.P.500.Index <- as.numeric(nRiskMRDf$STOCKS.S.P.500.Index)
+
+
+
+# Make sure if every week is unique, summarizing it by week
+nRiskMRDf <- nRiskMRDf %>% group_by(Week) %>% summarise(X5.Year.FD=sum(X5.Year.FD)/n(),
+                                                        BONDS.Treasury.5.Year = sum(BONDS.Treasury.5.Year)/n(),
+                                                        BONDS.Treasury.10.Year = sum(BONDS.Treasury.10.Year)/n(),
+                                                        STOCKS.S.P.500.Index = sum(STOCKS.S.P.500.Index)/n()
+)
+
+
+#Join main CSV Data with GDP
+navirishDf <-  navirishDf  %>% left_join(nRiskMRDf, by= c("Week"="Week"))
+
+#####
+
+nRiskMRDf$Week1 <- nRiskMRDf$Week
+navirishDf <-  navirishDf  %>% left_join(nRiskMRDf[,-1], by= c("Week1"="Week1"))
+
+##4. Read another sheet CPI_All_Urban //Month
+nRiskCPIDf <- as.data.frame(read_excel("External_data_NRisk.xlsx", sheet =4 ))
+
+#Check Headings
+names(nRiskCPIDf)
+nRiskCPIDf$Month <- paste0(nRiskCPIDf$Month,"-",nRiskCPIDf$Year)
+# Make sure if every month is unique, summarizing it by month
+nRiskCPIDf <- nRiskCPIDf %>% group_by(Month) %>% summarise(CPI_All_Urban=sum(CPI_All_Urban)/n())
+
+#Join main CSV Data with GDP
+navirishDf <-  navirishDf  %>% left_join(nRiskCPIDf, by= c("Month"="Month"))
+
+####
+
+nRiskCPIDf$Month1 <- nRiskCPIDf$Month
+navirishDf <-  navirishDf  %>% left_join(nRiskCPIDf[,-1], by= c("Month1"="Month1"))
+
+##5. Read another sheet Unemployment
+nRiskUnEmpDf <- as.data.frame(read_excel("External_data_NRisk.xlsx", sheet =5 ))
+
+#Check Headings
+names(nRiskUnEmpDf)
+nRiskUnEmpDf$Month <- paste0(nRiskUnEmpDf$Month,"-",nRiskUnEmpDf$Year)
+
+# Make sure if every year is unique, summarizing it by month
+nRiskUnEmpDf <- nRiskUnEmpDf %>% group_by(Month) %>% summarise(Unemployment=sum(Unemployment)/n())
+
+#Join main CSV Data with GDP
+navirishDf <-  navirishDf  %>% left_join(nRiskUnEmpDf, by= c("Month"="Month"))
+
+####
+
+nRiskUnEmpDf$Month1 <- nRiskUnEmpDf$Month
+navirishDf <-  navirishDf  %>% left_join(nRiskUnEmpDf[,-1], by= c("Month1"="Month1"))
+
+##6. Read another sheet HPI/ Quarter + STATE
+nRiskHPIDf <- as.data.frame(read_excel("External_data_NRisk.xlsx", sheet =6 ))
+
+#Check Headings
+names(nRiskHPIDf) <- make.names(names(nRiskHPIDf))
+
+nRiskHPIDf$QtrState <- paste0(nRiskHPIDf$Quarter,"-",nRiskHPIDf$Year, "-", nRiskHPIDf$State  )
+# Make sure if every year is unique, summarizing it by year
+nRiskHPIDf <- nRiskHPIDf %>% group_by(QtrState) %>% summarise(Housing.Price.Index=sum(Housing.Price.Index)/n())
+
+#Join main CSV Data with GDP
+navirishDf <-  navirishDf  %>% left_join(nRiskHPIDf, by= c("QtrState"="QtrState"))
+
+
+#####
+
+nRiskHPIDf$QtrState1 <- nRiskHPIDf$QtrState
+
+navirishDf <-  navirishDf  %>% left_join(nRiskHPIDf[,-1], by= c("QtrState1"="QtrState1"))
+
+
+##7. Read another sheet Mortgage
+#nRiskMortgageDf <- as.data.frame(read_excel("External_data_NRisk.xlsx", sheet =7 ))
+
+#Check Headings
+#names(nRiskMortgageDf) 
+
+#Data starts from 7th Row, 6th is Heading
+#names(nRiskMortgageDf) <- make.names(nRiskMortgageDf[6,])
+
+#Delate data from Row 1:6
+#nRiskMortgageDf <- nRiskMortgageDf[-c(1:6),]
+
+#sapply(nRiskMortgageDf, class)
+
+#nRiskMortgageDf$Time.Period <-ymd(nRiskMortgageDf$Time.Period)
+#nRiskMortgageDf$Week <- paste0(week(nRiskMortgageDf$Time.Period),"-",year(nRiskMortgageDf$Time.Period))
+
+#Convert data class
+#nRiskMortgageDf$Mortgage_Rate <- as.numeric(nRiskMortgageDf$Mortgage_Rate)
+
+# Make sure if every year is unique, summarizing it by year
+#nRiskMortgageDf <- nRiskMortgageDf %>% group_by(Week) %>% summarise(Mortgage_Rate=sum(Mortgage_Rate)/n())
+
+#Join main CSV Data with GDP
+#navirishDf <-  navirishDf  %>% left_join(nRiskMortgageDf, by= c("Week"="Week"))
+
+####
+
+MR <- read.csv("MORTGAGEUS.csv",header = T,stringsAsFactors = F)
+
+dim(MR)
+sapply(MR,class) 
+
+MR$DATE <- dmy(MR$DATE)
+#Convert values to date & Create Date Field
+MR$Week <- paste0(week(MR$DATE),"-",year(MR$DATE))
+class(MR)
+
+MR <- MR %>% group_by(Week) %>% summarise(Mortgage_Rate=sum(MORTGAGE30US)/n())
+
+#Join main CSV Data with GDP
+navirishDf <-  navirishDf  %>% left_join(MR, by= c("Week"="Week"))
+
+# 
+MR$Week1 <- MR$Week
+navirishDf <-  navirishDf  %>% left_join(MR[,-1], by= c("Week1"="Week1"))
+
+
+#removing the spaces trailing ahead
+navirishDf$PD_Pol_status<- gsub("[[:space:]]","",navirishDf$PD_Pol_status)
+
+unique(navirishDf$PD_Pol_status)
+
+#Creating a new data frame which have only inforce and surrender as policy status
+
+DF <- navirishDf[navirishDf$PD_Pol_status=="Inforce" | navirishDf$PD_Pol_status=="Surrender",]
+
+DF.one  <- DF[complete.cases(DF),]
+
+sum(is.na(DF.one))
+
+## Create Target Varible
+
+DF.one$Target <- as.factor(ifelse (DF.one$PD_Pol_status=="Surrender",1, 0))
+
+# drop policy status from the data frmae 
+
+DF.one <- subset(DF.one,select = -c(PD_Pol_status))
+
+## WRITE FINAL MERGED FILE without any missing values for our modelling
+
+write.csv(DF.one, "allvariablesvariation.csv")
+
+
+#devtools::install_github("tidyverse/reprex")
+
+sapply(DF.one, class)
+
+## drop all date columns which were created for merging
+
+DF.one <- DF.one[,-c(49:57)]
+
+### Creating varibles with information which is required by Navirisk
+
+DF.one$GDP <- round((((DF.one$GrossDomesticProduct.x-DF.one$GrossDomesticProduct.y)*100)/DF.one$GrossDomesticProduct.y),2)
+
+DF.one$CPI <- round((((DF.one$CPI_All_Urban.x -DF.one$CPI_All_Urban.y)*100)/DF.one$CPI_All_Urban.y),2)
+
+DF.one$Mort <- round((((DF.one$Mortgage_Rate.x -DF.one$Mortgage_Rate.y)*100)/DF.one$Mortgage_Rate.y),2)
+
+DF.one$HPI <- round((((DF.one$Housing.Price.Index.x -DF.one$Housing.Price.Index.y)*100)/DF.one$Housing.Price.Index.y),2)
+
+DF.one$UEMP <- round((((DF.one$Unemployment.x -DF.one$Unemployment.y)*100)/DF.one$Unemployment.y),2)
+
+DF.one$FD <- round((((DF.one$X5.Year.FD.x -DF.one$X5.Year.FD.y)*100)/DF.one$X5.Year.FD.y),2)
+
+DF.one$Bond <- round((((DF.one$BONDS.Treasury.10.Year.x -DF.one$BONDS.Treasury.10.Year.y)*100)/DF.one$BONDS.Treasury.10.Year.y),2)
+
+
+
+### dropping the varibles which are not required post percentage change calculation
+
+DF.one <- DF.one[,-c(49:68)]
+
+### checking unquie vlaues in DF.one data frame
+
+summary(DF.one)
+
+sapply(DF.one, class)
+
+dim(DF.one)
+
+boxplot(DF.one$CPI)
+
+library(tibble)
+
+
+DF.one$CPI <- as.vector(scale(DF.one$CPI,center = TRUE,scale = TRUE))
+
+DF.one$FD <- as.vector(scale(DF.one$FD,center = TRUE,scale = TRUE))
+
+DF.one$Bond <- as.vector(scale(DF.one$Bond,center = TRUE,scale = TRUE))
+
+DF.one$GDP <- as.vector(scale(DF.one$GDP,center = TRUE,scale = TRUE))
+
+DF.one$UEMP <- as.vector(scale(DF.one$UEMP,center = TRUE,scale = TRUE))
+
+DF.one$HPI <- as.vector(scale(DF.one$HPI,center = TRUE,scale = TRUE))
+
+DF.one$Mort <- as.vector(scale(DF.one$Mort,center = TRUE,scale = TRUE))
+
+DF.one$PD_Pol_dur <- as.vector(scale(DF.one$PD_Pol_dur,center = TRUE,scale = TRUE))
+
+DF.one$PD_Prem_amt <- as.vector(scale(DF.one$PD_Prem_amt,center = TRUE,scale = TRUE))
+
+DF.one$PD_Prem_Init_amt <- as.vector(scale(DF.one$PD_Prem_Init_amt,center = TRUE,scale = TRUE))
+
+DF.one$PD_Cred_rate <- as.vector(scale(DF.one$PD_Cred_rate,center = TRUE,scale = TRUE))
+
+DF.one$TRD_Fxd_fund_val <- as.vector(scale(DF.one$TRD_Fxd_fund_val,center = TRUE,scale = TRUE))
+
+DF.one$TRD_Tot_wd_amt <- as.vector(scale(DF.one$TRD_Tot_wd_amt,center = TRUE,scale = TRUE))
+
+DF.one$TRD_FPW_wd_amt_remain <- as.vector(scale(DF.one$TRD_FPW_wd_amt_remain,center = TRUE,scale = TRUE))
+
+DF.one$PRD_Surr_chg_prd <- as.vector(scale(DF.one$PRD_Surr_chg_prd,center = TRUE,scale = TRUE))
+
+DF.one$TRD_Trans_amt_surr <- as.vector(scale(DF.one$TRD_Trans_amt_surr,center = TRUE,scale = TRUE))
+
+DF.one$TRD_Surr_chg_amt <- as.vector(scale(DF.one$TRD_Surr_chg_amt,center = TRUE,scale = TRUE))
+
+
+DF.one$PD_Guar_rate <- as.vector(scale(DF.one$PD_Guar_rate,center = TRUE,scale = TRUE))
+
+DF.one$TRD_cash_val <- as.vector(scale(DF.one$TRD_cash_val,center = TRUE,scale = TRUE))
+
+DF.one$DST_Distr_num <- as.vector(scale(DF.one$DST_Distr_num,center = TRUE,scale = TRUE))
+
+
+
+DF_Nor <- DF.one[]
+#[,-c(33:39)]
+
+
+sapply(DF_Nor, class)
+
+
+
+summary(DF_Nor)
+
+### Convert varibales into Factor Target PD_Pol_type DST_Distr_zip_cd DST_Ditr_st_cd DST_Distr_Id  (PD_Pol_status DST_Distr_comm_id) PRD_Pol_FPW PD_Qual_ind
+# DST_Distr_typ PH_zip_cd PH_st_cd PH_Gender
+
+DF_Nor$Target <- as.factor(DF_Nor$Target)
+
+DF_Nor$PD_Pol_type <- as.factor(DF_Nor$PD_Pol_type)
+
+DF_Nor$DST_Distr_zip_cd <- as.factor(DF_Nor$DST_Distr_zip_cd)
+
+DF_Nor$DST_Ditr_st_cd <- as.factor(DF_Nor$DST_Ditr_st_cd)
+
+DF_Nor$DST_Distr_Id <- as.factor(DF_Nor$DST_Distr_Id)
+
+DF_Nor$PRD_Pol_FPW <- as.factor(DF_Nor$PRD_Pol_FPW)
+
+DF_Nor$PD_Qual_ind <- as.factor(DF_Nor$PD_Qual_ind)
+
+DF_Nor$DST_Distr_typ <- as.factor(DF_Nor$DST_Distr_typ)
+
+DF_Nor$PH_st_cd <- as.factor(DF_Nor$PH_st_cd)
+
+DF_Nor$DST_Distr_num <-as.factor(DF_Nor$DST_Distr_num)
+
+DF_Nor$PH_Gender <- as.factor(DF_Nor$PH_Gender)
+
+
+DF_Nor$PD_Guar_yrs <- as.factor(DF_Nor$PD_Guar_yrs)
+
+#DF_Nor$PD_Pol_dur <- as.factor(DF_Nor$PD_Pol_dur)
+
+summary(DF_Nor)
+
+## dropping not required variables
+
+DF_Nor_1 <- DF_Nor[,-c(1,3,4,5,7,15,16,18,31,46)]
+
+summary(DF_Nor_1)
+
+## unique values in all columns
+
+apply(DF_Nor_1, 2, function(x) length(unique(x)))
+
+## dropping the varibles which is not providing the information
+
+DF_Nor_1 <- DF_Nor_1[,-c(8,9,16,17,18,19,20,24,26:33,35,37,38)]
+
+
+## rechecking the unique values in new data frame
+
+apply(DF_Nor_1, 2, function(x) length(unique(x)))
+
+# covert interger valrible into numeric varibale
+
+DF_Nor_1$PD_Pol_dur <- as.numeric(DF_Nor_1$PD_Pol_dur)
+
+DF_Nor_1$PH_Issue_age <- as.numeric(DF_Nor_1$PH_Issue_age)
+
+DF_Nor_1$PH_Attn_age <- as.numeric(DF_Nor_1$PH_Attn_age)
+
+#DF_Nor_1$PD_Cred_rate <- as.numeric(DF_Nor_1$PD_Cred_rate)
+
+sapply(DF_Nor_1, class)
+
+class(DF_Nor_1$PD_issue_date)
+
+# covert date varibales as dates
+
+# DF_Nor_1$PD_issue_date <- mdy(DF_Nor_1$PD_issue_date)
+
+
+### sampling
+
+set.seed(200)
+
+Index <- sample(nrow(DF_Nor_1),.7*nrow(DF_Nor_1),replace = FALSE)
+
+Train <- DF_Nor_1[Index,]
+
+Test <- DF_Nor_1[-Index,]
+
+## Proportion of classifiers in testing and trainig datset
+
+table(Train$Target)/nrow(Train)
+table(Test$Target)/nrow(Test)
+
+
+library(ggplot2)
+
+#install.packages("corrplot")
+
+library(corrplot)
+
+sapply(Train1, class)
+
+M <- cor(Train[,-c(1,2,3,5,6,7,10,11,13,17,18,19,20)])
+
+head(round(M,2))
+
+corrplot(M, type = "upper")
+
+Train1 <- Train[,-c(1,3,5,6,11,13,16:19)]
+#Test <- Test[,-c(1,2,3,5,6,7,10,11,13,17,18,19)]
